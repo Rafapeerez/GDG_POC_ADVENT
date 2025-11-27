@@ -11,6 +11,6 @@ public class Solution {
      */
     public static int countVulnerableSections(int[] stabilities, int securityThreshold) {
         // TODO: Implement logic to count vulnerable sections
-        return 0;
+        return 1;
     }
 }
