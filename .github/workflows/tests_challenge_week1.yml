@@ -4,10 +4,39 @@ on:
     branches:
       - main
     paths:
-      - 'challenges/week1/solution.py'
+      - 'challenges/week1/**/solution.*'
 
 jobs:
-  test_solution:
+  detect-language:
+    runs-on: ubuntu-latest
+    outputs:
+      language: ${{ steps.detect.outputs.language }}
+      solution-path: ${{ steps.detect.outputs.solution-path }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Detect language and solution file
+        id: detect
+        run: |
+          for file in challenges/week1/*/solution.*; do
+            if [[ -f "$file" ]]; then
+              echo "solution-path=$file" >> $GITHUB_OUTPUT
+              case "${file##*.}" in
+                py)
+                  echo "language=python" >> $GITHUB_OUTPUT
+                  ;;
+                java)
+                  echo "language=java" >> $GITHUB_OUTPUT
+                  ;;
+              esac
+              break
+            fi
+          done
+
+  test-python:
+    needs: detect-language
+    if: needs.detect-language.outputs.language == 'python'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -18,15 +47,10 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          # pip install pytest
-
-      - name: Run Private Tests
+      - name: Run Python Tests
         env:
           PRIVATE_TEST_DATA: ${{ secrets.WEEK_01_PRIVATE_TESTS }}
-          CHALLENGE_FILE_PATH: 'challenges/week1/solution.py'
+          CHALLENGE_FILE_PATH: ${{ needs.detect-language.outputs.solution-path }}
           TARGET_FUNCTION_NAME: "count_vulnerable_sections"
         run: |
           python - << 'EOF'
@@ -41,7 +65,7 @@ jobs:
                   print('Error: La ruta del archivo del desafío (CHALLENGE_FILE_PATH) no fue proporcionada o está vacía.')
                   sys.exit(1)
 
-              target_function_name = os.environ.get('TARGET_FUNCTION_NAME')x
+              target_function_name = os.environ.get('TARGET_FUNCTION_NAME')
               if not target_function_name:
                   print('Error: El nombre de la función (TARGET_FUNCTION_NAME) no fue proporcionado o está vacío.')
                   sys.exit(1)
@@ -74,7 +98,8 @@ jobs:
               print('--- Ejecutando Pruebas Privadas ---')
 
               for i, test_case in enumerate(tests):
-                  inputs = test_case.get('input', [])
+                  stabilities = test_case.get('stabilities', [])
+                  security_threshold = test_case.get('security_threshold', 0)
                   expected = test_case.get('expected', None)
 
                   try:
@@ -84,7 +109,7 @@ jobs:
                           all_passed = False
                           continue
 
-                      result = func(*inputs)
+                      result = func(stabilities, security_threshold)
                       if result == expected:
                           print(f'Prueba Privada {i+1}: ✅ PASSED')
                       else:
@@ -105,3 +130,120 @@ jobs:
 
           run_challenge_tests()
           EOF
+
+  test-java:
+    needs: detect-language
+    if: needs.detect-language.outputs.language == 'java'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Run Java Tests
+        env:
+          PRIVATE_TEST_DATA: ${{ secrets.WEEK_01_PRIVATE_TESTS }}
+          CHALLENGE_FILE_PATH: ${{ needs.detect-language.outputs.solution-path }}
+          TARGET_FUNCTION_NAME: "countVulnerableSections"
+        run: |
+          # Crear directorio temporal para compilación
+          mkdir -p temp_java
+
+          # Copiar el archivo de solución y crear un wrapper de test
+          cp "$CHALLENGE_FILE_PATH" temp_java/Solution.java
+
+          # Crear clase de test que ejecuta los casos privados
+          cat > temp_java/TestRunner.java << 'EOF'
+          import java.util.*;
+          import java.lang.reflect.*;
+          import com.fasterxml.jackson.databind.*;
+
+          public class TestRunner {
+              public static void main(String[] args) {
+                  try {
+                      String privateTestData = System.getenv("PRIVATE_TEST_DATA");
+                      String targetFunctionName = System.getenv("TARGET_FUNCTION_NAME");
+
+                      if (privateTestData == null) {
+                          System.out.println("Error: SECRETOS DE PRUEBA NO ENCONTRADOS.");
+                          System.exit(1);
+                      }
+
+                      ObjectMapper mapper = new ObjectMapper();
+                      JsonNode tests = mapper.readTree(privateTestData);
+
+                      Class<?> solutionClass = Solution.class;
+                      Object solutionInstance = solutionClass.getDeclaredConstructor().newInstance();
+
+                      Method targetMethod = null;
+                      for (Method method : solutionClass.getDeclaredMethods()) {
+                          if (method.getName().equals(targetFunctionName)) {
+                              targetMethod = method;
+                              break;
+                          }
+                      }
+                      if (targetMethod == null) {
+                          System.out.println("Error: No se encontró la función \"" + targetFunctionName + "\".");
+                          System.exit(1);
+                      }
+                      boolean allPassed = true;
+                      System.out.println("--- Ejecutando Pruebas Privadas ---");
+                      for (int i = 0; i < tests.size(); i++) {
+                          JsonNode testCase = tests.get(i);
+
+                          try {
+                              JsonNode stabilitiesNode = testCase.get("stabilities");
+                              int securityThreshold = testCase.get("security_threshold").asInt();
+                              int expected = testCase.get("expected").asInt();
+
+                              int[] stabilities = new int[stabilitiesNode.size()];
+                              for (int j = 0; j < stabilitiesNode.size(); j++) {
+                                  stabilities[j] = stabilitiesNode.get(j).asInt();
+                              }
+
+                              Object result = targetMethod.invoke(solutionInstance, stabilities, securityThreshold);
+                              int resultInt = (Integer) result;
+
+                              if (resultInt == expected) {
+                                  System.out.println("Prueba Privada " + (i+1) + ": ✅ PASSED");
+                              } else {
+                                  System.out.println("Prueba Privada " + (i+1) + ": ❌ FAILED - Se esperaba " + expected + ", se obtuvo " + resultInt);
+                                  allPassed = false;
+                              }
+                          } catch (Exception e) {
+                              System.out.println("Prueba Privada " + (i+1) + ": ❌ ERROR durante la ejecución - " + e.getMessage());
+                              allPassed = false;
+                          }
+                      }
+                      System.out.println("----------------------------------");
+                      if (allPassed) {
+                          System.out.println("¡Todas las pruebas privadas han pasado! 🎉");
+                          System.exit(0);
+                      } else {
+                          System.out.println("Algunas pruebas privadas han fallado.");
+                          System.exit(1);
+                      }
+                  } catch (Exception e) {
+                      System.out.println("Error fatal: " + e.getMessage());
+                      e.printStackTrace();
+                      System.exit(1);
+                  }
+              }
+          }
+          EOF
+
+          curl -s -o temp_java/jackson-core.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-core/2.15.2/jackson-core-2.15.2.jar
+          curl -s -o temp_java/jackson-databind.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.15.2/jackson-databind-2.15.2.jar
+          curl -s -o temp_java/jackson-annotations.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.15.2/jackson-annotations-2.15.2.jar
+
+          cd temp_java
+          javac -cp ".:jackson-core.jar:jackson-databind.jar:jackson-annotations.jar" *.java
+          java -cp ".:jackson-core.jar:jackson-databind.jar:jackson-annotations.jar" TestRunner
+
+          cd ..
+          rm -rf temp_java
