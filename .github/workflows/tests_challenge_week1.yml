@@ -74,7 +74,8 @@ jobs:
               print('--- Ejecutando Pruebas Privadas ---')
 
               for i, test_case in enumerate(tests):
-                  inputs = test_case.get('input', [])
+                  stabilities = test_case.get('stabilities', [])
+                  security_threshold = test_case.get('security_threshold', 0)
                   expected = test_case.get('expected', None)
 
                   try:
@@ -84,7 +85,7 @@ jobs:
                           all_passed = False
                           continue
 
-                      result = func(*inputs)
+                      result = func(stabilities, security_threshold)
                       if result == expected:
                           print(f'Prueba Privada {i+1}: ✅ PASSED')
                       else:
