@@ -5,6 +5,7 @@ on:
       - main
     paths:
       - 'challenges/week1/**/solution.*'
+      - 'challenges/week1/**/Solution.*'
 
 jobs:
   detect-language:
@@ -19,7 +20,8 @@ jobs:
       - name: Detect language and solution file
         id: detect
         run: |
-          for file in challenges/week1/*/solution.*; do
+          # Buscar archivos de solución en el directorio week1
+          for file in challenges/week1/*/solution.* challenges/week1/*/Solution.*; do
             if [[ -f "$file" ]]; then
               echo "solution-path=$file" >> $GITHUB_OUTPUT
               case "${file##*.}" in
