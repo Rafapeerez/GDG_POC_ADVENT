@@ -41,7 +41,7 @@ jobs:
                   print('Error: La ruta del archivo del desafío (CHALLENGE_FILE_PATH) no fue proporcionada o está vacía.')
                   sys.exit(1)
 
-              target_function_name = os.environ.get('TARGET_FUNCTION_NAME')x
+              target_function_name = os.environ.get('TARGET_FUNCTION_NAME')
               if not target_function_name:
                   print('Error: El nombre de la función (TARGET_FUNCTION_NAME) no fue proporcionado o está vacío.')
                   sys.exit(1)
