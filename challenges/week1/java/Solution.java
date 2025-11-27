@@ -2,15 +2,15 @@ package challenges.week1.java;
 
 public class Solution {
     /**
-     * Cuenta el número de secciones vulnerables basado en los niveles de estabilidad
-     * y un umbral de seguridad.
+     * Counts the number of vulnerable sections based on stability levels
+     * and a security threshold.
      *
-     * @param stabilities Array de enteros que representa los niveles de estabilidad
-     * @param securityThreshold Umbral de seguridad para determinar vulnerabilidad
-     * @return Número de secciones vulnerables encontradas
+     * @param stabilities Array of integers representing stability levels
+     * @param securityThreshold Security threshold to determine vulnerability
+     * @return Number of vulnerable sections found
      */
     public static int countVulnerableSections(int[] stabilities, int securityThreshold) {
-        // TODO: Implementar la lógica para contar secciones vulnerables
+        // TODO: Implement logic to count vulnerable sections
         return 0;
     }
 }
