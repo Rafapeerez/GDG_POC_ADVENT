@@ -40,8 +40,8 @@ jobs:
           # Crear directorio temporal para compilación
           mkdir -p temp_java
           
-          # Copiar el archivo de solución y crear un wrapper de test
-          cp "$CHALLENGE_FILE_PATH" temp_java/Solution.java
+          # Leer el archivo de solución y remover la declaración de package
+          sed '/^package /d' "$CHALLENGE_FILE_PATH" > temp_java/Solution.java
           
           # Crear clase de test que ejecuta los casos privados
           cat > temp_java/TestRunner.java << 'EOF'
@@ -66,13 +66,16 @@ jobs:
                       
                       // Cargar la clase de solución
                       Class<?> solutionClass = Solution.class;
-                      Object solutionInstance = solutionClass.getDeclaredConstructor().newInstance();
+                      Object solutionInstance = null;
                       
-                      // Buscar el método objetivo
+                      // Intentar crear instancia - buscar métodos estáticos primero
                       Method targetMethod = null;
+                      boolean isStaticMethod = false;
+                      
                       for (Method method : solutionClass.getDeclaredMethods()) {
                           if (method.getName().equals(targetFunctionName)) {
                               targetMethod = method;
+                              isStaticMethod = java.lang.reflect.Modifier.isStatic(method.getModifiers());
                               break;
                           }
                       }
@@ -80,6 +83,11 @@ jobs:
                       if (targetMethod == null) {
                           System.out.println("Error: No se encontró la función \"" + targetFunctionName + "\".");
                           System.exit(1);
+                      }
+                      
+                      // Solo crear instancia si el método no es estático
+                      if (!isStaticMethod) {
+                          solutionInstance = solutionClass.getDeclaredConstructor().newInstance();
                       }
                       
                       boolean allPassed = true;
@@ -101,7 +109,12 @@ jobs:
                               }
                               
                               // Ejecutar el método
-                              Object result = targetMethod.invoke(solutionInstance, stabilities, securityThreshold);
+                              Object result;
+                              if (isStaticMethod) {
+                                  result = targetMethod.invoke(null, stabilities, securityThreshold);
+                              } else {
+                                  result = targetMethod.invoke(solutionInstance, stabilities, securityThreshold);
+                              }
                               int resultInt = (Integer) result;
                               
                               if (resultInt == expected) {
